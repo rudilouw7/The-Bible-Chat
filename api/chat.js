@@ -1,4 +1,5 @@
-// Vercel Serverless Function for Bible Chat
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
 export default async function handler(req, res) {
   // Only allow POST requests
   if (req.method !== 'POST') {
@@ -16,67 +17,45 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, systemPrompt, model } = req.body;
+    const { message, systemPrompt } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+    if (!message || !systemPrompt) {
+      return res.status(400).json({ error: 'Message and systemPrompt are required' });
     }
 
-    // Get API key from environment variable (secure!)
+    // Get API key from environment variable
     const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
+      console.error('GEMINI_API_KEY not found in environment variables');
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    // Call Gemini API
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash-exp'}:generateContentStream?key=${apiKey}&alt=sse`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: message }]
-            }
-          ],
-          systemInstruction: {
-            parts: [{ text: systemPrompt }]
-          }
-        }),
-      }
-    );
+    // Initialize Google Generative AI
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.0-flash-exp",
+      systemInstruction: systemPrompt
+    });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Gemini API error:', error);
-      return res.status(response.status).json({ error: 'Failed to generate response' });
-    }
-
-    // Stream the response back
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    // Generate content
+    const result = await model.generateContentStream(message);
     
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      const chunk = decoder.decode(value);
-      res.write(chunk);
+    // Stream the response back as JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    let fullResponse = '';
+    
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      fullResponse += chunkText;
     }
 
-    res.end();
+    res.status(200).json({ response: fullResponse });
+
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
   }
 }
 
