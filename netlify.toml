@@ -5,6 +5,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  
+[context.production.environment]
+  BUILD_IMAGE = "ubuntu-noble-24.04"
 
 [[redirects]]
   from = "/api/*"
