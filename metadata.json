@@ -1,0 +1,5 @@
+{
+  "name": "The Bible Chat",
+  "description": "An interactive chat application that allows users to ask questions and receive answers from the perspective of various biblical figures, powered by the Gemini API.",
+  "requestFramePermissions": []
+}
